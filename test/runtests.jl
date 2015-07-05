@@ -20,4 +20,6 @@ test_basics()
 # MathProgBase
 include(joinpath(Pkg.dir("MathProgBase"),"test","mixintprog.jl"))
 mixintprogtest(SCIPSolver())
+include(joinpath(Pkg.dir("MathProgBase"),"test","quadprog.jl"))
+quadprogtest(SCIPSolver())
 include("mpb.jl")

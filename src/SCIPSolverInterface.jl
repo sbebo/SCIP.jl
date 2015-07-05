@@ -7,6 +7,8 @@ export SCIPMathProgModel, SCIPSolver
 type SCIPMathProgModel <: AbstractMathProgModel
     ptr::SPtr{_SCIP}
     vars::Vector{SPtr{_SCIP_VAR}}
+    etaidx::Int
+    objcons  #::SPtr{_SCIP_CONS}
 end
 function SCIPMathProgModel(;options...)
     # TODO: Pass options
@@ -137,7 +139,13 @@ getobjbound(m::SCIPMathProgModel) = _SCIPgetDualbound(m.ptr)
 function getsolution(m::SCIPMathProgModel)
     #sol  = SPtr(_SCIP_SOL)
     sol = _SCIPgetBestSol(m.ptr)
-    return [_SCIPgetSolVal(m.ptr, sol, m.vars[i]) for i in 1:numvar(m)]
+    solval = [_SCIPgetSolVal(m.ptr, sol, m.vars[i]) for i in 1:numvar(m)]
+    if m.etaidx == 0
+        return solval
+    else # return only original variables
+        deleteat!(solval, m.etaidx)
+        return solval
+    end
 end
 
 #getconstrsolution(m::SCIPMathProgModel)
@@ -184,7 +192,63 @@ getvartype(m::SCIPMathProgModel) = [_SCIPvarGetType(m.vars[i]) for i in 1:numvar
 # QUADRATIC PROGRAMMING INTERFACE
 ######################################################################
 
-# ...
+function addquadconstr!(m::SCIPMathProgModel, linidx, linval, quadrowidx, quadcolidx, quadval, sense, rhs)
+    lb = - _SCIPinfinity(m.ptr)
+    ub = _SCIPinfinity(m.ptr)
+    if sense == '<'
+        ub = rhs
+    elseif sense == '>'
+        lb = rhs
+    elseif sense == '='
+        lb = rhs
+        ub = rhs
+    else
+        error("Sense not recognized.")
+    end
+
+    cons = SCIPcreateConsBasicQuadratic(m.ptr, m.vars[linidx],
+                                            linval,
+                                            m.vars[quadrowidx],
+                                            m.vars[quadcolidx],
+                                            quadval,
+                                            lb, ub)
+    _SCIPaddCons(m.ptr, cons)
+    nothing
+end
+
+function setquadobj!(m::SCIPMathProgModel, rowidx, colidx, quadval)
+    if getsense(m) == :Min  # Min: eta - x'Qx >= 0
+        lb = 0
+        ub = _SCIPinfinity(m.ptr)
+    else # Max: eta - 1/2x'Qx <= 0
+        ub = 0
+        lb = _SCIPinfinity(m.ptr)
+    end
+
+    ((n = length(rowidx)) == length(colidx) == length(quadval)) || error("Inconsistent argument dimensions.")
+    quadcoef = quadval
+    for i = 1:n
+        if rowidx[i] == colidx[i]
+           quadcoef[i]/=2
+        end
+    end
+
+   if m.etaidx == 0
+      addvar!(m, -_SCIPinfinity(m.ptr), _SCIPinfinity(m.ptr), 1)
+      m.etaidx = length(m.vars)
+   end
+    if m.objcons != nothing
+       _SCIPdelCons(m.ptr, m.objcons)
+   end
+    m.objcons = SCIPcreateConsBasicQuadratic(m.ptr, [m.vars[m.etaidx]],
+    [1],
+    m.vars[rowidx],
+    m.vars[colidx],
+    - quadcoef,
+    0, Inf)
+    _SCIPaddCons(m.ptr, m.objcons)
+    nothing
+end
 
 ######################################################################
 # CALLBACK INTERFACE

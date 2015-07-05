@@ -1,4 +1,4 @@
-export SCIPcreate, SCIPcreateVarBasic, SCIPcreateConsBasicLinear
+export SCIPcreate, SCIPcreateVarBasic, SCIPcreateConsBasicLinear, SCIPcreateConsBasicQuadratic
 
 # Convenience constructors/destructors
 function SCIPcreate()
@@ -35,5 +35,30 @@ function SCIPcreateConsBasicLinear(scip::SPtr{_SCIP}, name::String, vars::Vector
                                convert(_SCIP_Real,lhs), 
                                convert(_SCIP_Real,rhs))
     # finalizer(cons, cons->_SCIPreleaseCons(scip, cons))
+    return cons
+end
+
+
+SCIPcreateConsBasicQuadratic(scip::SPtr{_SCIP}, linvars::Vector{SPtr{_SCIP_VAR}}, linvals, quadvars1::Vector{SPtr{_SCIP_VAR}}, quadvars2::Vector{SPtr{_SCIP_VAR}}, quadvals, lhs, rhs) = 
+    SCIPcreateConsBasicQuadratic(scip, "", linvars, linvals, quadvars1, quadvars2, quadvals, lhs, rhs)
+function SCIPcreateConsBasicQuadratic(scip::SPtr{_SCIP}, name::String, linvars, linvals, quadvars1::Vector{SPtr{_SCIP_VAR}}, quadvars2::Vector{SPtr{_SCIP_VAR}}, quadvals, lhs, rhs)
+    nlinvars = length(linvars)
+    nquadterms = length(quadvars1)
+    @assert length(linvals) == nlinvars
+    @assert length(quadvals) == length(quadvars2) == nquadterms
+
+    cons = SPtr(_SCIP_CONS)
+    _SCIPcreateConsBasicQuadratic(scip, 
+                               pointer(cons), 
+                               name, 
+                               nlinvars, 
+                               pointer(linvars), 
+                               convert(Vector{_SCIP_Real},linvals),
+                               nquadterms, 
+                               pointer(quadvars1),
+                               pointer(quadvars2),
+                               convert(Vector{_SCIP_Real},quadvals),
+                               convert(_SCIP_Real,lhs), 
+                               convert(_SCIP_Real,rhs))
     return cons
 end
